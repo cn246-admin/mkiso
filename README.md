@@ -51,9 +51,9 @@ With the git worktree method, you can use/modify local branches with custom vari
 
         $ git clone --bare git@github.com:cn246-admin/mkiso.git .git
 
-4. Clone main branch (optional):
+4. Create a worktree of the main branch (optional):
 
-        $ git clone . main
+        $ git worktree add main
 
 4. Create a worktree branch:
 
