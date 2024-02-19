@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+
+# This script downloads and verifies the latest ISO image from Debian's site.
+# Usage:
+#   ./get_latest_iso
+#
+# Follow the prompt
+
+gpg_key_short="0xDA87E80D6294BE9B"
+gpg_key="DF9B9C49EAA9298432589D76DA87E80D6294BE9B"
+
+# Bold output
+code_bld () {
+  tput bold
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Green output
+code_grn () {
+  tput setaf 2
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Red output
+code_red () {
+  tput setaf 1
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Yellow output
+code_yel () {
+  tput setaf 3
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Error checks
+if ! command -v "curl" > /dev/null; then
+  code_red "[ERROR] curl not installed!"
+  echo
+  exit 1
+fi
+
+# Prompt to choose architecture
+select_arch() {
+  printf '%s\n' "Select which ISO architecture you would like to download: "
+  PS3='Please choose: '
+
+  options=("arm64" "amd64")
+
+  select opt in "${options[@]}"; do
+    case $REPLY in
+      1|2)
+        arch="${opt}"
+        break
+        ;;
+      *) code_red  "[ERROR] Invalid option: $REPLY" ;;
+    esac
+  done
+
+  url="https://cdimage.debian.org/debian-cd/current/${arch}/iso-cd/"
+}
+
+# Use curl to download
+curl_download() {
+  curl --location --remote-name "${1}"
+}
+
+# Find latest ISO
+query_latest() {
+  latest_iso="$(curl --silent "${url}" | \
+    awk -v iso="debian-[[:digit:]].*-${arch}-netinst\.iso" \
+      -F'href=|>' '$0 ~ iso { gsub(/\"/, "", $0); print $4 }')"
+  echo
+  printf '%s\n\n' "[INFO] Newest ISO available is ${latest_iso}"
+}
+
+# Download ISO file
+download_iso() {
+  if [ ! -f "${latest_iso}" ]; then
+    printf '%s\n' "[INFO] Downloading ${latest_iso}"
+    curl_download "${url}/${latest_iso}"
+    echo
+  else
+    code_red "[ERROR] ${latest_iso} already downloaded! Exiting.."
+    exit 1
+  fi
+}
+
+# Download checksum files
+download_sums() {
+  if [ ! -f "SHA512SUMS" ]; then
+    printf '%s\n' "[INFO] Downloading SHA512SUMS"
+    curl_download "${url}/SHA512SUMS"
+    echo
+  else
+    if ! grep -q "${latest_iso}" "SHA512SUMS"; then
+      code_yel "[INFO] Deleting existing SHA512SUMS"
+      rm -f SHA512SUMS
+      printf '%s\n' "[INFO] Downloading SHA512SUMS"
+      curl_download "${url}/SHA512SUMS"
+      echo
+    fi
+  fi
+}
+
+# Download checksum signature files
+download_sigs() {
+  if [ ! -f "SHA512SUMS.sign" ]; then
+    printf '%s\n' "[INFO] Downloading SHA512SUMS.sign"
+    curl_download "${url}/SHA512SUMS.sign"
+    echo
+  else
+    code_yel "[INFO] Deleting existing SHA512SUMS.sign"
+    rm -f SHA512SUMS.sign
+    printf '%s\n' "[INFO] Downloading SHA512SUMS.sign"
+    curl_download "${url}/SHA512SUMS"
+    echo
+  fi
+}
+
+# Check if Debian gpg key is in keyring
+import_gpg() {
+  if ! gpg --list-keys "${gpg_key_short}" >/dev/null; then
+    code_yel "[INFO] Importing Debian GPG Key"
+    gpg --keyserver keyring.debian.org --recv "${gpg_key}"
+    echo
+  fi
+}
+
+# Verify checksum and ISO file
+verify_iso() {
+  printf '%s\n' "[INFO] Verifying GPG signature"
+  if gpg --verify SHA512SUMS.sign SHA512SUMS; then
+    echo
+    printf '%s\n' "[INFO] Verifying ISO checksums"
+    if sha512sum  --ignore-missing -c SHA512SUMS 2>/dev/null; then
+      echo
+      code_grn "[SUCCESS] ${latest_iso} successfully verified!"
+      printf '%s\n' "[INFO] Cleaning up signature files"
+      rm -f SHA512SUMS SHA512SUMS.sign
+      echo
+    else
+      echo
+      code_red "[ERROR] SHA512SUM failed. Exiting"
+      exit 1
+    fi
+  else
+    echo
+    code_red "[ERROR] Signature verification failed. Exiting"
+    exit 1
+  fi
+}
+
+# Download and verify the ISO
+select_arch
+query_latest
+download_iso
+download_sums
+download_sigs
+import_gpg
+verify_iso
+
+code_grn "Done, enjoy!"
+
+# vim: ft=sh ts=2 sts=2 sw=2 sr et
