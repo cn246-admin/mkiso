@@ -1,0 +1,146 @@
+#!/bin/sh
+# Encrypted boot information:
+# https://cryptsetup-team.pages.debian.net/cryptsetup/encrypted-boot.html
+
+# Print commands and their arguments as they are executed
+set -x
+
+# Define variables
+script_dir="/cdrom/preseed_scripts"
+
+rootfs_device="$(mount | grep '/target ' | cut -d' ' -f1)"
+
+rootfs_vg_name="$(lvdisplay "${rootfs_device}" | grep 'VG Name' | sed 's@.* @@g')"
+
+vg_name="$(vgdisplay "${rootfs_vg_name}" | grep 'VG Name' | sed 's@.* @@g')"
+
+root_encrypted_volume_map="$(pvs --separator ',' --noheadings -o pv_name,vg_name 2>/dev/null |\
+  grep -E "${vg_name}$" | sed 's@^ *@@g; s@,.*@@g')"
+
+root_encrypted_volume_dev="$(cryptsetup status "${root_encrypted_volume_map}" |\
+  grep "device:" | sed 's@.* @@g')"
+
+root_encrypted_volume_uuid="$(blkid -o value -s UUID "${root_encrypted_volume_dev}")"
+
+boot_dev="$(mount | grep '/target/boot ' | sed 's@ .*@@g')"
+
+bootfs_uuid="$(blkid -o value -s UUID "${boot_dev}")"
+
+# Backup /boot (in-target)
+# Remount /boot read only to make sure data is not modified while being copied.
+mount -oremount,ro /target/boot
+
+# Archive the directory in /tmp
+in-target tar -C /boot --acls --xattrs --one-file-system -cf /tmp/boot.tar .
+
+# Create encrypted container for /boot
+# Set umask
+umask 0077
+
+# Generate shared secret inside new file
+if [ ! -f /target/root/keys/scrap ]; then
+  mkdir /target/root/keys
+  dd bs=1 count=64 if=/dev/urandom of=/target/root/keys/scrap
+fi
+
+# Unmount /boot/efi
+if mount | grep '/boot/efi'; then
+  umount /target/boot/efi
+fi
+
+# Unmount /boot
+umount /target/boot
+
+# Write the boot partition with random data
+dd if=/dev/urandom of="${boot_dev}" bs=1M status=none
+
+# Format boot partition to use LUKS1
+cryptsetup luksFormat --type luks1 --key-file=- "${boot_dev}" < "${script_dir}"/fde_passphrase
+
+# Create new key slot for the key file
+cryptsetup luksAddKey "${boot_dev}" /target/root/keys/scrap -d "${script_dir}"/fde_passphrase
+
+# Read passphrase from file
+cryptsetup luksOpen "${boot_dev}" boot_crypt -d "${script_dir}"/fde_passphrase
+
+# Format the boot partition to use ext2
+mkfs.ext2 -m0 -U "${bootfs_uuid}" /dev/mapper/boot_crypt
+
+# Mount boot_crypt to /target/boot
+mount /dev/mapper/boot_crypt /target/boot
+
+# Garbage collection pass on the blkid cache to remove devices which no longer exist
+blkid -g
+
+# Configure fde password
+# Update Encryption Passphrase
+cryptsetup luksAddKey "${root_encrypted_volume_dev}"\
+  "${script_dir}"/fde_passphrase -d "${script_dir}"/temp_passphrase
+
+# Overwrite key at slot 0 in place so root gets unlocked faster
+cryptsetup luksChangeKey "${root_encrypted_volume_dev}"\
+  /target/root/keys/scrap -d "${script_dir}"/temp_passphrase -S 0
+
+# Update crypttab
+crypttab_volume="$(basename "${root_encrypted_volume_map}") UUID=${root_encrypted_volume_uuid}"
+sed -i -E "s@^(${crypttab_volume}) none (.*)@\1 /root/keys/scrap \2@g" /target/etc/crypttab
+
+# Modify files to enable encrypted /boot
+# Add entry to crypttab with mapped device name
+boot_encrypted_volume_uuid="$(blkid -o value -s UUID "${boot_dev}")"
+printf "%s\n" "boot_crypt UUID=${boot_encrypted_volume_uuid} /root/keys/scrap luks,key-slot=1"\
+  >> /target/etc/crypttab
+
+# Configure GRUB to enable encrypted /boot
+grep -Eq '^GRUB_ENABLE_CRYPTODISK=y' /target/etc/default/grub ||\
+  printf "\n%s\n%s\n" "# Encrypted /boot" "GRUB_ENABLE_CRYPTODISK=y" >> /target/etc/default/grub
+
+# Set KEYFILE_PATTERN to use the generated key in the initramfs image
+grep -Eq '^KEYFILE_PATTERN="/root/keys/scrap"'\
+  /target/etc/cryptsetup-initramfs/conf-hook ||\
+  printf "%s\n" 'KEYFILE_PATTERN="/root/keys/scrap"'\
+  >> /target/etc/cryptsetup-initramfs/conf-hook
+
+# Set UMASK to a restrictive value to avoid leaking key material
+grep -Eq '^UMASK=0077' /target/etc/initramfs-tools/initramfs.conf ||\
+  printf "\n%s\n" "UMASK=0077" >> /target/etc/initramfs-tools/initramfs.conf
+
+# Restore /boot (in-target)
+# Extract the original /boot to the newly encrypted partition
+in-target tar -C /boot --acls --xattrs -xf /tmp/boot.tar
+
+# Mount ESP
+# Mount /sys to target
+mount -o bind /sys /target/sys
+
+if [ -d /target/sys/firmware/efi ]; then
+  #esp_uuid="$(grep -E "^UUID=.* \/boot\/efi" /target/etc/fstab |\
+  esp_uuid="$(grep '/boot/efi' /target/etc/fstab | grep 'UUID' |\
+    sed -E 's@^UUID=([^[:space:]]+)[[:space:]]+.*@\1@')"
+  esp_dev="$(blkid -U "${esp_uuid}")"
+  mount "${esp_dev}" /target/boot/efi
+fi
+
+# Finalize (in-target)
+if [ -d /target/sys/firmware/efi ]; then
+  in-target apt-get install --reinstall grub-efi -y
+fi
+
+# Set variable
+boot_encrypted_volume_uuid="$(grep boot_crypt /target/etc/crypttab |\
+  sed -E 's@^boot_crypt UUID=(.*) /root/keys/scrap .*@\1@')"
+
+# Quoting the variable breaks this command!
+install_device="$(blkid -U "${boot_encrypted_volume_uuid}" |\
+  sed -E 's@([[:digit:]])+@@')"
+
+# Re-install grub
+in-target grub-install "${install_device}"
+
+# Run update-grub
+in-target update-grub
+
+# Update initramfs
+in-target update-initramfs -u -k all
+
+# vim: ft=sh ts=2 sts=2 sw=2 sr et

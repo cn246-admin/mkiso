@@ -1,0 +1,395 @@
+#!/usr/bin/env bash
+
+# Embeds a preseed file into a Debian ISO image. (amd64, arm64)
+# Optionally encrypts the filesystem
+# Optionally encrypts /boot
+
+# Commands from:
+# https://wiki.debian.org/DebianInstaller/Modify/CD
+# https://wiki.debian.org/RepackBootableISO
+# https://wiki.debian.org/ManipulatingISOs
+# https://wiki.debian.org/DebianInstaller/Preseed/EditIso
+# https://help.ubuntu.com/community/Grub2/Submenus
+
+# You may need to modify the "version" variable if you're using a different iso
+# format than debian-11.0.0-arm64-netinst.iso
+
+# Print commands and their arguments as they are executed
+# set -x
+
+# Define Variables
+username='username'
+fullname='User McUserson'
+hostname='unassigned-hostname'
+ntp_server='pool.ntp.org'
+domain='unassigned-domain'
+
+# shellcheck disable=SC2016
+sha_hash='$6$WjjqADCT0feX14dj$92eqN/ppL2gEZhU6Mcua5QOAaY5BPkt5GDRQKEUt9Y0UDABX9fo1XVI6BTkv4bYH36IWhZovdG/uMDhckAwvI0'
+# shellcheck disable=SC2016
+yes_hash='$y$j9T$CdKjTO4U8eKs4Pz3tgtCl.$Qqd7a5bMDx5oU3bM6ur6zWmJ6fRSoJFyVpjBxu4oaH/'
+
+iso_files="isofiles"
+orig_iso="${1}"
+output_dir="output"
+preseed_files="files/preseed_files"
+
+shopt -s extglob
+arch="${1##"debian-"}"
+arch="${arch##+([0-9.])-}"
+arch="${arch%%-netinst.iso}"
+
+release="${1##firmware-}"
+release="${release##debian-}"
+release="${release%%.*}"
+
+version="${1##firmware-}"
+version="${version##debian-}"
+version="${version%%"-${arch}-netinst.iso"}"
+shopt -u extglob
+
+volume_id="Debian ${version} ${arch} n"
+
+# Set variables based on release version
+case "${release}" in
+  '9')
+    codename="stretch"
+    password="${sha_hash}"
+    ;;
+  '10')
+    codename="buster"
+    password="${sha_hash}"
+    ;;
+  '11')
+    codename="bullseye"
+    password="${yes_hash}"
+    ;;
+  '12')
+    codename="bookworm"
+    password="${yes_hash}"
+    ;;
+  '13')
+    codename="trixie"
+    password="${yes_hash}"
+    ;;
+  '14')
+    codename="forky"
+    password="${yes_hash}"
+    ;;
+esac
+
+# Green output
+code_grn () {
+  tput setaf 2
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Red output
+code_red () {
+  tput setaf 1
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Yellow output
+code_yel () {
+  tput setaf 3
+  printf '%s\n' "${1}"
+  tput sgr0
+}
+
+# Error checks
+if ! command -v "xorriso" > /dev/null; then
+  code_red "[ERROR] xorriso not installed!"
+  echo
+  exit 1
+fi
+
+if [ -z "${1}" ]; then
+  code_red "[ERROR] Usage:"
+  printf '%s\n' "  ./$(basename "${0}") debian-xx.x.x-xxx64-netinst.iso"
+  echo
+  exit 1
+fi
+
+if [ -d "${iso_files}" ]; then
+  code_red "[ERROR] Directory ${iso_files} exists; Please correct and re-run"
+  echo
+  exit 1
+fi
+
+[ ! -d "${output_dir}" ] && mkdir "${output_dir}"
+
+# Prompt for amd64 options
+preseed_amd64() {
+  printf '%s\n' "Select which type of ISO you would like to generate: "
+  PS3='Please choose: '
+
+  options=("kvm" "kvm: encrypted" "workstation: encrypted"
+           "workstation: encrypted boot")
+
+  select opt in "${options[@]}"; do
+    case $REPLY in
+      1)
+        printf '%s\n\n' "  Configuring preseed iso for $opt"
+        new_iso="Debian-${version}-PRESEED-kvm.iso"
+        preseed_file="${preseed_files}/kvm-${codename}.cfg"
+        break
+        ;;
+      2)
+        printf '%s\n\n' "  Configuring preseed iso for $opt"
+        new_iso="Debian-${version}-PRESEED-kvm_encrypted.iso"
+        preseed_file="${preseed_files}/kvm-${codename}-encrypted.cfg"
+        break
+        ;;
+      3)
+        printf '%s\n\n' "  Configuring preseed iso for $opt"
+        new_iso="Debian-${version}-PRESEED-ws-full_encrypted.iso"
+        preseed_file="${preseed_files}/workstation-${codename}-encrypted.cfg"
+        break
+        ;;
+      4)
+        printf '%s\n\n' "  Configuring preseed iso for $opt"
+        new_iso="Debian-${version}-PRESEED-ws-full_encrypted.iso"
+        preseed_file="${preseed_files}/workstation-${codename}-encrypted_boot.cfg"
+        break
+        ;;
+      *) code_red  "[ERROR] Invalid option: $REPLY" ;;
+    esac
+  done
+}
+
+# Prompt for arm64 options
+preseed_arm64() {
+  printf '%s\n' "Select which type of ISO you would like to generate: "
+  PS3='Please choose: '
+
+  options=("utm" "utm: encrypted")
+
+  select opt in "${options[@]}"; do
+    case $REPLY in
+      1)
+        printf '%s\n\n' "  Configuring preseed iso for $opt"
+        new_iso="Debian-${version}-PRESEED-utm.iso"
+        preseed_file="${preseed_files}/utm-${codename}.cfg"
+        break
+        ;;
+      2)
+        printf '%s\n\n' "  Configuring preseed iso for $opt"
+        new_iso="Debian-${version}-PRESEED-utm_encrypted.iso"
+        preseed_file="${preseed_files}/utm-${codename}-encrypted.cfg"
+        break
+        ;;
+      *) code_red "[ERROR] Invalid option: $REPLY" ;;
+    esac
+  done
+}
+
+# Error if $new_iso exists
+iso_exists() {
+  if [ -f "${new_iso}" ]; then
+    code_red "[ERROR] ISO ${new_iso} exists; Please correct and re-run"
+    exit 1
+  fi
+}
+
+# amd64 preparation
+extract_mbr_amd64() {
+  # Extract mbr from ISO
+  dd if="${orig_iso}" bs=1 count=446 of="${mbr_template}"
+}
+
+# arm64 preparation
+extract_efi_arm64() {
+  code_yel "[INFO] sudo access needed for fdisk operation on ${orig_iso}"
+  start_block=$(sudo fdisk -l "${orig_iso}" | grep -F "${orig_iso}"2 | awk '{print $2}')
+  block_count=$(sudo fdisk -l "${orig_iso}" | grep -F "${orig_iso}"2 | awk '{print $4}')
+
+  # Extract EFI partition image
+  if test "${start_block}" -gt 0 -a "${block_count}" -gt 0 2> /dev/null; then
+    dd if="${orig_iso}" bs=512 skip="${start_block}" count="${block_count}" of="${efi_template}"
+  else
+    code_red "[ERROR] Cannot read start block and block count from fdisk" >&2
+  fi
+}
+
+# Unpack the ISO image
+unpack_iso() {
+  mkdir -p "${iso_files}"
+  xorriso -osirrox on -indev "${orig_iso}" -extract / "${iso_files}"
+}
+
+# Copy preseed files to the extracted ISO
+put_preseed() {
+  cp -a "files/preseed_scripts" "${iso_files}"
+  sed "s@MY_USER@${username}@g; s@MY_FULLNAME@${fullname:=${username}}@g; \
+    s@MY_HOSTNAME@${hostname}@g; s@MY_NTP@${ntp_server}@g; \
+     s@MY_DOMAIN@${domain}@g; s@MY_PASSWORD@${password}@g;" \
+    "${preseed_file}" > "${iso_files}/preseed.cfg"
+  chmod 0644 "${iso_files}/preseed.cfg"
+}
+
+# Configure the amd64 install menu
+auto_select_amd64() {
+  # Enable write permissions on menu files
+  chmod u+w "${iso_files}/isolinux" "${iso_files}/isolinux/isolinux.cfg"
+
+  # Configure default selection
+  sed -i 's/^default .*/default auto/g' "${iso_files}/isolinux/isolinux.cfg"
+
+  # Disable write permissions on menu files
+  chmod u-w "${iso_files}/isolinux" "${iso_files}/isolinux/isolinux.cfg"
+
+  # Set permissions for grub menu
+  chmod -R u+w "${iso_files}/boot/grub"
+
+  # Autoselect uefi menu
+  sed -i "/^menuentry --hotkey=g/i set default=\'Advanced options ...>... Automated install\'\nset timeout=5" isofiles/boot/grub/grub.cfg
+
+  # Disable write permissions on grub menu
+  chmod -R u-w "${iso_files}/boot/grub"
+}
+
+# Configure the arm64 install menu
+auto_select_arm64() {
+  # Set permissions for grub menu
+  chmod -R u+w "${iso_files}/boot/grub"
+
+  # Autoselect uefi menu
+  sed -i "/^insmod gzio/a set default=\'Advanced options ...>... Automated install\'\nset timeout=5" isofiles/boot/grub/grub.cfg
+
+  # Disable write permissions on grub dir
+  chmod -R u-w "${iso_files}/boot/grub"
+}
+
+# Update the initrd
+mod_initrd() {
+  # Enter the isofiles directory
+  cd "${iso_files}" || exit
+
+  # Enable write permissions on initrd directory
+  chmod -R u+w "${initrd_dir}/"
+
+  # Unzip initrd
+  gunzip "${initrd_dir}/initrd.gz"
+
+  # Add the preseed to the initrd
+  echo preseed.cfg | cpio -H newc -o -A -F "${initrd_dir}/initrd"
+
+  # Re-Zip initrd
+  gzip "${initrd_dir}/initrd"
+
+  # Enable write permissions on md5sum.txt
+  chmod u+w md5sum.txt
+
+  # Generate new md5sum.txt
+  find . ! -name "md5sum.txt" ! -path "./isolinux/*" -follow -type f -print0 |
+    xargs -0 md5sum > md5sum.txt
+
+  # Disable write permissions on md5sum.txt before writing iso
+  chmod u-w md5sum.txt
+
+  # Disable write permissions on initrd directory before writing iso
+  chmod -R u-w "${initrd_dir}/"
+
+  # Move back a directory
+  cd .. || exit
+}
+
+# Re-pack amd64 ISO image
+pack_amd64() {
+  xorriso -as mkisofs \
+    -r -V "${volume_id}" \
+    -o "${output_dir}/${new_iso}" \
+    -J -joliet-long -cache-inodes \
+    -isohybrid-mbr "${mbr_template}" \
+    -b isolinux/isolinux.bin \
+    -c isolinux/boot.cat \
+    -boot-load-size 4 -boot-info-table -no-emul-boot \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img -no-emul-boot \
+    -isohybrid-gpt-basdat -isohybrid-apm-hfsplus \
+    "${iso_files}" 2> /dev/null
+}
+
+# Re-pack arm64 ISO image
+pack_arm64() {
+  xorriso -as mkisofs \
+    -r -V "${volume_id}" \
+    -o "${output_dir}/${new_iso}" \
+    -J -joliet-long -cache-inodes \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    -append_partition 2 0xef "${efi_template}" \
+    -partition_cyl_align all \
+    "${iso_files}" 2> /dev/null
+}
+
+# Generate SHA512SUM file
+gen_sha() {
+  cd "${output_dir}" || exit
+  shasum=$(sha512sum "${new_iso}")
+  printf '%s\n' "${shasum}" >> "SHA512SUMS"
+  cd .. || exit
+}
+
+# Clean up temporary files
+clean_up() {
+  # Need write permissions so we can delete
+  chmod -R u+w "${iso_files}"
+  [ -f "${efi_template}" ] && rm -f "${efi_template}"
+  [ -f "${mbr_template}" ] && rm -f "${mbr_template}"
+  rm -rf "${iso_files}"
+}
+
+# Do the things..
+case "${arch}" in
+  "amd64")
+    mbr_template="/tmp/isohdpfx.bin"
+    initrd_dir="install.amd"
+    preseed_amd64
+    iso_exists
+    extract_mbr_amd64
+    unpack_iso
+    put_preseed
+    auto_select_amd64
+    mod_initrd
+    pack_amd64
+    gen_sha
+    ;;
+  "arm64")
+    efi_template="/tmp/efi.img"
+    initrd_dir="install.a64"
+    preseed_arm64
+    iso_exists
+    extract_efi_arm64
+    unpack_iso
+    put_preseed
+    auto_select_arm64
+    mod_initrd
+    pack_arm64
+    gen_sha
+    ;;
+esac
+
+# Newline for cleaner output formatting
+echo
+
+# Clean up
+read -rp "Would you like to remove ${iso_files} directory? [Yy|Nn] " response
+
+case "${response}" in
+  "Y" | "y")
+    printf '%s\n' "[INFO] Cleaning up!"
+    clean_up
+    ;;
+  *)
+    printf '%s\n' "[INFO] Exiting without cleaning up"
+    exit 0
+    ;;
+esac
+
+code_grn "Done, enjoy!"
+
+# vim: ft=sh ts=2 sts=2 sw=2 sr et

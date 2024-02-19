@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Sets up basic qol things on a fresh system
+
+user="${1}"
+
+# Add $user to adm group
+usermod --append --groups adm "${user}"
+
+# Set Vim as the default editor
+update-alternatives --set editor /usr/bin/vim.basic
+
+# Enable vi mode by default
+echo "" >> "/target/home/${user}/.bashrc"
+echo "set -o vi" >> "/target/home/${user}/.bashrc"
+
+# Configure SSH access
+umask 0077
+mkdir -m 0700 "/home/${user}/.ssh"
+cat > "/home/${user}/.ssh/authorized_keys" <<EOF
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHYtzVG2nwqc28nSv9RRtIyDeQepc0BOlum4ku5aw2U5 user@p50
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMwdLnckn1/euOMSqXrHrlsx2/V5tL/mwAuQi/Y0mHQ user@gaming
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINuiVTfMIHT3EjnD1Z/PsAbk2cRmbTpgWIRwhhscgoHL user@mac-studio
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFU1+z4HOBjPsnUmgv8T9ASAXbdAQwmhnFaJ/QXhSsZb user@macbook
+EOF
+
+# Set permissions on ~/.ssh
+chown -R "${user}":"${user}" "/home/${user}/.ssh"
+chmod 0644 "/home/${user}/.ssh/authorized_keys"
+
+exit 0
+
+# vim: ft=sh ts=2 sts=2 sw=2 sr et
