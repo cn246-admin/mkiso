@@ -1,2 +1,3 @@
 *.iso
 isofiles/
+*.env
