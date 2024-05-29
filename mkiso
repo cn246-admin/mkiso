@@ -17,22 +17,12 @@
 # Print commands and their arguments as they are executed
 # set -x
 
-# Define Variables
-username='username'
-fullname='User McUserson'
-hostname='unassigned-hostname'
-ntp_server='pool.ntp.org'
-domain='unassigned-domain'
-
-# shellcheck disable=SC2016
-sha_hash='$6$WjjqADCT0feX14dj$92eqN/ppL2gEZhU6Mcua5QOAaY5BPkt5GDRQKEUt9Y0UDABX9fo1XVI6BTkv4bYH36IWhZovdG/uMDhckAwvI0'
-# shellcheck disable=SC2016
-yes_hash='$y$j9T$CdKjTO4U8eKs4Pz3tgtCl.$Qqd7a5bMDx5oU3bM6ur6zWmJ6fRSoJFyVpjBxu4oaH/'
-
 iso_files="isofiles"
 orig_iso="${1}"
 output_dir="output"
 preseed_files="files/preseed_files"
+settings_file="${2-options.env}"
+settings=$(sed -e 's/\r//' -e '/^#/d;/^\s*$/d;/^\w*$/d' "${settings_file}")
 
 shopt -s extglob
 arch="${1##"debian-"}"
@@ -52,52 +42,18 @@ volume_id="Debian ${version} ${arch} n"
 
 # Set variables based on release version
 case "${release}" in
-  '9')
-    codename="stretch"
-    password="${sha_hash}"
-    ;;
-  '10')
-    codename="buster"
-    password="${sha_hash}"
-    ;;
-  '11')
-    codename="bullseye"
-    password="${yes_hash}"
-    ;;
-  '12')
-    codename="bookworm"
-    password="${yes_hash}"
-    ;;
-  '13')
-    codename="trixie"
-    password="${yes_hash}"
-    ;;
-  '14')
-    codename="forky"
-    password="${yes_hash}"
-    ;;
+  '9')  codename="stretch";;
+  '10') codename="buster";;
+  '11') codename="bullseye";;
+  '12') codename="bookworm";;
+  '13') codename="trixie";;
+  '14') codename="forky";;
 esac
 
-# Green output
-code_grn () {
-  tput setaf 2
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-
-# Red output
-code_red () {
-  tput setaf 1
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-
-# Yellow output
-code_yel () {
-  tput setaf 3
-  printf '%s\n' "${1}"
-  tput sgr0
-}
+# Colored output
+code_grn () { tput setaf 2; printf '%s\n' "${1}"; tput sgr0; }
+code_red () { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
+code_yel () { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
 
 # Error checks
 if ! command -v "xorriso" > /dev/null; then
@@ -113,6 +69,12 @@ if [ -z "${1}" ]; then
   exit 1
 fi
 
+if [ ! -f "${settings_file}" ]; then
+  code_red "[INFO] missing ${settings_file} file"
+  echo
+  exit 1
+fi
+
 if [ -d "${iso_files}" ]; then
   code_red "[ERROR] Directory ${iso_files} exists; Please correct and re-run"
   echo
@@ -120,6 +82,23 @@ if [ -d "${iso_files}" ]; then
 fi
 
 [ ! -d "${output_dir}" ] && mkdir "${output_dir}"
+
+# Export environment variables
+load_env() {
+  while IFS='=' read -r key value; do
+    value="${value//\"/}"
+    value="${value//\'/}"
+    # shellcheck disable=SC2163
+    printf -v "${key}" '%s' "${value}" && export "${key}"
+  done <<< "${settings}"
+}
+
+# Unset environment variables
+unload_env() {
+  while IFS='=' read -r key _; do
+    unset "${key}"
+  done <<< "${settings}"
+}
 
 # Prompt for amd64 options
 preseed_amd64() {
@@ -222,12 +201,11 @@ unpack_iso() {
 
 # Copy preseed files to the extracted ISO
 put_preseed() {
-  cp -a "files/preseed_scripts" "${iso_files}"
-  sed "s@MY_USER@${username}@g; s@MY_FULLNAME@${fullname:=${username}}@g; \
-    s@MY_HOSTNAME@${hostname}@g; s@MY_NTP@${ntp_server}@g; \
-     s@MY_DOMAIN@${domain}@g; s@MY_PASSWORD@${password}@g;" \
-    "${preseed_file}" > "${iso_files}/preseed.cfg"
+  load_env
+  envsubst < "${preseed_file}" > "${iso_files}/preseed.cfg"
+  unload_env
   chmod 0644 "${iso_files}/preseed.cfg"
+  cp -a "files/preseed_scripts" "${iso_files}"
 }
 
 # Configure the amd64 install menu
