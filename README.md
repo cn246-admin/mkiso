@@ -36,34 +36,21 @@ If you _really_ wanted to, you could configure the preseed file to fully provisi
 The `whois` package is not required but provides **mkpasswd** which is useful for generating password hashes.
 
 ## Installation
-The following method uses [git worktrees](https://git-scm.com/docs/git-worktree) -- Totally optional.
+1. Clone the repo:
 
-With the git worktree method, you can use/modify local branches with custom variables and preseed files while keeping the main branch clean.
+        $ git clone git@github.com:cn246-admin/mkiso.git
 
-1. Create directory:
-
-        $ mkdir mkiso
-
-2. Change to the new directory:
+2. Change to the `mkiso` dir:
 
         $ cd mkiso
-3. Clone the bare repo to a `.git` directory:
 
-        $ git clone --bare git@github.com:cn246-admin/mkiso.git .git
+3. Copy the options example file:
 
-4. Create a worktree of the main branch (optional):
+        $ cp options.env.example options.env
 
-        $ git worktree add main
+4. Modify the options:
 
-4. Create a worktree branch:
-
-        $ git worktree add local
-
-5. Change to the `local` dir:
-
-        $ cd local
-
-6. Do your work in there :)
+        $ $EDITOR options.env
 
 
 ## Usage Instructions
@@ -101,6 +88,9 @@ With the git worktree method, you can use/modify local branches with custom vari
 
         ./mkiso debian-12.4.0-arm64-netinst.iso
 
+        # optionally pass other .env files
+        ./mkiso debian-12.4.0-arm64-netinst.iso otheroptions.env
+
 
 4. Check the output directory for the results:
 
@@ -119,13 +109,22 @@ With the git worktree method, you can use/modify local branches with custom vari
 ## Variables
 The `mkiso` script has variables at the top that can (and probably should) be defined:
 ```bash
-username=""
-fullname=""
-hostname="unassigned-hostname"
-ntp_server="pool.ntp.org"
-domain="unassigned-domain"
-sha_hash='$6$WjjqADCT0feX14dj$92eqN/ppL2gEZhU6Mcua5QOAaY5BPkt5GDRQKEUt9Y0UDABX9fo1XVI6BTkv4bYH36IWhZovdG/uMDhckAwvI0'
-yes_hash='$y$j9T$CdKjTO4U8eKs4Pz3tgtCl.$Qqd7a5bMDx5oU3bM6ur6zWmJ6fRSoJFyVpjBxu4oaH/'
+MY_USERNAME=userson
+
+# Full Name
+MY_FULLNAME=User McUserson
+
+# NTP Server
+MY_NTP=pool.ntp.org
+
+# Domain
+MY_DOMAIN=unassigned-domain
+
+# System Hostname
+MY_HOSTNAME=unassigned-hostname
+
+# Password Hash (yescrypt)
+MY_PASSWORD='$y$j9T$CdKjTO4U8eKs4Pz3tgtCl.$Qqd7a5bMDx5oU3bM6ur6zWmJ6fRSoJFyVpjBxu4oaH/'
 ```
 
 ### Password Hashes
