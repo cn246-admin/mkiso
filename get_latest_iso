@@ -9,33 +9,11 @@
 gpg_key_short="0xDA87E80D6294BE9B"
 gpg_key="DF9B9C49EAA9298432589D76DA87E80D6294BE9B"
 
-# Bold output
-code_bld () {
-  tput bold
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-
-# Green output
-code_grn () {
-  tput setaf 2
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-
-# Red output
-code_red () {
-  tput setaf 1
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-
-# Yellow output
-code_yel () {
-  tput setaf 3
-  printf '%s\n' "${1}"
-  tput sgr0
-}
+# Colored output
+code_bld () { tput bold; printf '%s\n' "${1}"; tput sgr0; }
+code_grn () { tput setaf 2; printf '%s\n' "${1}"; tput sgr0; }
+code_red () { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
+code_yel () { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
 
 # Error checks
 if ! command -v "curl" > /dev/null; then
@@ -46,17 +24,13 @@ fi
 
 # Prompt to choose architecture
 select_arch() {
+  options=("arm64" "amd64" "exit")
   printf '%s\n' "Select which ISO architecture you would like to download: "
   PS3='Please choose: '
-
-  options=("arm64" "amd64")
-
   select opt in "${options[@]}"; do
     case $REPLY in
-      1|2)
-        arch="${opt}"
-        break
-        ;;
+      1|2) arch="${opt}"; break ;;
+      3) exit ;;
       *) code_red  "[ERROR] Invalid option: $REPLY" ;;
     esac
   done
