@@ -22,12 +22,12 @@ if ! command -v "curl" >/dev/null; then
   exit 1
 fi
 
-# script arg
+# Script arg
 arch_select="$1"
 
 # Prompt to choose architecture
 select_arch() {
-  if [ "$arch_select" = "arm64" ] || [ "$arch_select" = "amd64" ]; then
+  if [ "${arch_select}" = "arm64" ] || [ "${arch_select}" = "amd64" ]; then
     arch="${arch_select}"
   else
     options=("arm64" "amd64" "exit")
@@ -35,10 +35,7 @@ select_arch() {
     PS3='Please choose: '
     select opt in "${options[@]}"; do
       case $REPLY in
-      1 | 2)
-        arch="${opt}"
-        break
-        ;;
+      1|2) arch="${opt}"; break ;;
       3) exit ;;
       *) code_red "[ERROR] Invalid option: $REPLY" ;;
       esac
