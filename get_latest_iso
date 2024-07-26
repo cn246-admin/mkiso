@@ -2,7 +2,7 @@
 
 # This script downloads and verifies the latest ISO image from Debian's site.
 # Usage:
-#   ./get_latest_iso
+#   ./get_latest_iso [arm64|amd64]
 #
 # Follow the prompt
 
@@ -16,24 +16,31 @@ code_red () { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
 code_yel () { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
 
 # Error checks
-if ! command -v "curl" > /dev/null; then
+if ! command -v "curl" >/dev/null; then
   code_red "[ERROR] curl not installed!"
   echo
   exit 1
 fi
 
+# Script arg
+arch_select="$1"
+
 # Prompt to choose architecture
 select_arch() {
-  options=("arm64" "amd64" "exit")
-  printf '%s\n' "Select which ISO architecture you would like to download: "
-  PS3='Please choose: '
-  select opt in "${options[@]}"; do
-    case $REPLY in
+  if [ "${arch_select}" = "arm64" ] || [ "${arch_select}" = "amd64" ]; then
+    arch="${arch_select}"
+  else
+    options=("arm64" "amd64" "exit")
+    printf '%s\n' "Select which ISO architecture you would like to download: "
+    PS3='Please choose: '
+    select opt in "${options[@]}"; do
+      case $REPLY in
       1|2) arch="${opt}"; break ;;
       3) exit ;;
-      *) code_red  "[ERROR] Invalid option: $REPLY" ;;
-    esac
-  done
+      *) code_red "[ERROR] Invalid option: $REPLY" ;;
+      esac
+    done
+  fi
 
   url="https://cdimage.debian.org/debian-cd/current/${arch}/iso-cd/"
 }
@@ -45,7 +52,7 @@ curl_download() {
 
 # Find latest ISO
 query_latest() {
-  latest_iso="$(curl --silent "${url}" | \
+  latest_iso="$(curl --silent "${url}" |
     awk -v iso="debian-[[:digit:]].*-${arch}-netinst\.iso" \
       -F'href=|>' '$0 ~ iso { gsub(/\"/, "", $0); print $4 }')"
   echo
@@ -111,7 +118,7 @@ verify_iso() {
   if gpg --verify SHA512SUMS.sign SHA512SUMS; then
     echo
     printf '%s\n' "[INFO] Verifying ISO checksums"
-    if sha512sum  --ignore-missing -c SHA512SUMS 2>/dev/null; then
+    if sha512sum --ignore-missing -c SHA512SUMS 2>/dev/null; then
       echo
       code_grn "[SUCCESS] ${latest_iso} successfully verified!"
       printf '%s\n' "[INFO] Cleaning up signature files"
