@@ -10,26 +10,10 @@ gpg_key_short="0xDA87E80D6294BE9B"
 gpg_key="DF9B9C49EAA9298432589D76DA87E80D6294BE9B"
 
 # Colored output
-code_bld() {
-  tput bold
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-code_grn() {
-  tput setaf 2
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-code_red() {
-  tput setaf 1
-  printf '%s\n' "${1}"
-  tput sgr0
-}
-code_yel() {
-  tput setaf 3
-  printf '%s\n' "${1}"
-  tput sgr0
-}
+code_bld () { tput bold; printf '%s\n' "${1}"; tput sgr0; }
+code_grn () { tput setaf 2; printf '%s\n' "${1}"; tput sgr0; }
+code_red () { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
+code_yel () { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
 
 # Error checks
 if ! command -v "curl" >/dev/null; then
