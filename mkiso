@@ -168,7 +168,7 @@ preseed_arm64() {
 # Validate the preseed file
 check_debconf_selections() {
   local updated_seed_file="${1}"
-  debconf-set-selections --checkonly $updated_seed_file || {
+  debconf-set-selections --checkonly ${updated_seed_file} || {
     code_red "[ERROR] debconf-set-selections failed. Error in preseed file?"
     exit 1
   }
