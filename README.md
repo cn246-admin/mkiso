@@ -35,6 +35,8 @@ If you _really_ wanted to, you could configure the preseed file to fully provisi
 
 The `whois` package is not required but provides **mkpasswd** which is useful for generating password hashes.
 
+The **Custom pressed files** section on this [Debian wiki entry](https://wiki.debian.org/DebianInstaller/Preseed#Custom_preseed_files) suggests installing [debconf-utils](https://packages.debian.org/stable/debconf-utils). I have found that [debconf-set-selections](https://manpages.debian.org/stable/debconf/debconf-set-selections.1.en.html) for verifying the preseed file is available without it installed on the systems I've checked.
+
 ## Installation
 1. Clone the repo:
 
