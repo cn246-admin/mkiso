@@ -93,8 +93,6 @@ load_env() {
   done <<< "${settings}"
 }
 
-
-
 # Unset environment variables
 unload_env() {
   while IFS='=' read -r key _; do
@@ -167,15 +165,6 @@ preseed_arm64() {
   done
 }
 
-check_debconf_selections() {
-  local updated_seed_file="$1"
-  debconf-set-selections --checkonly $updated_seed_file || {
-    code_red "[ERROR] debconf-set-selections failed. Error in preseed file?"
-    exit 1
-  }
-}
-
-
 # Error if $new_iso exists
 iso_exists() {
   if [ -f "${new_iso}" ]; then
@@ -214,7 +203,6 @@ unpack_iso() {
 put_preseed() {
   load_env
   envsubst < "${preseed_file}" > "${iso_files}/preseed.cfg"
-  check_debconf_selections "${iso_files}/preseed.cfg"
   unload_env
   chmod 0644 "${iso_files}/preseed.cfg"
   cp -a "files/preseed_scripts" "${iso_files}"
