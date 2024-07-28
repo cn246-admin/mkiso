@@ -15,7 +15,7 @@ code_red() { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
 code_yel() { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
 
 # Error checks
-if ! command -v "curl" >/dev/null; then
+if ! command -v "curl" >/dev/null 2>&1; then
   code_red "[ERROR] curl not installed!"
   echo
   exit 1
