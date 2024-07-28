@@ -51,9 +51,9 @@ case "${release}" in
 esac
 
 # Colored output
-code_grn () { tput setaf 2; printf '%s\n' "${1}"; tput sgr0; }
-code_red () { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
-code_yel () { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
+code_grn() { tput setaf 2; printf '%s\n' "${1}"; tput sgr0; }
+code_red() { tput setaf 1; printf '%s\n' "${1}"; tput sgr0; }
+code_yel() { tput setaf 3; printf '%s\n' "${1}"; tput sgr0; }
 
 # Error checks
 if ! command -v "xorriso" > /dev/null; then
