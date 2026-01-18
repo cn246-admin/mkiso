@@ -1,3 +1,4 @@
+*.env
 *.iso
 isofiles/
-*.env
+output/
