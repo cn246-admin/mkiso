@@ -1,8 +1,9 @@
 # mkiso
 
-Create a bootable Debian ISO with a preseed file embedded for fully automatic installation and configuration.
+Create a bootable Debian ISO with a preseed file embedded for fully automatic
+installation and configuration.
 
-**mkiso** supports Debian 9, 10, 11 and 12 amd64/arm64 images.
+**mkiso** supports Debian 9, 10, 11, 12 and 13 amd64/arm64 images.
 
 Can it do LUKS encrypted drives? *Absolutely!*
 How about encrypted `/boot` support? *Youbetcha!*
@@ -20,11 +21,14 @@ Use the resulting ISO images for:
   - Installing Debian on Lenovo P50, x230 and x200 or other workstations
   - Whatever else you want to install Debian on ..within reason of course :)
 
-I prefer to use preseed for initial convenience setup: installing common packages, configure ssh, set passwords, set vim as default.
+I prefer to use preseed for initial convenience setup: installing common packages,
+configure ssh, set passwords, set vim as default.
 
-After installation, I run [Anisble playbooks](https://docs.ansible.com/ansible/latest/playbook_guide/index.html) to provision any services the machines will be used for.
+After installation, I run [Anisble playbooks](https://docs.ansible.com/ansible/latest/playbook_guide/index.html)
+to provision any services the machines will be used for.
 
 If you _really_ wanted to, you could configure the preseed file to fully provision any desired services instead.
+
 
 ## Requirements
 1. Be logged in to a Debian based machine.
@@ -33,9 +37,15 @@ If you _really_ wanted to, you could configure the preseed file to fully provisi
 
         $ sudo apt install git whois xorriso
 
-The `whois` package is not required but provides **mkpasswd** which is useful for generating password hashes.
+The `whois` package is not required but provides **mkpasswd** which is useful
+for generating password hashes.
 
-The **Custom pressed files** section on this [Debian wiki entry](https://wiki.debian.org/DebianInstaller/Preseed#Custom_preseed_files) suggests installing [debconf-utils](https://packages.debian.org/stable/debconf-utils). I have found that [debconf-set-selections](https://manpages.debian.org/stable/debconf/debconf-set-selections.1.en.html) for verifying the preseed file is available without it installed on the systems I've checked.
+The **Custom pressed files** section on this [Debian wiki entry](https://wiki.debian.org/DebianInstaller/Preseed#Custom_preseed_files)
+suggests installing [debconf-utils](https://packages.debian.org/stable/debconf-utils).
+I have found that [debconf-set-selections](https://manpages.debian.org/stable/debconf/debconf-set-selections.1.en.html)
+for verifying the preseed file is available without it installed on the systems
+I've checked.
+
 
 ## Installation
 1. Clone the repo:
@@ -66,9 +76,13 @@ The **Custom pressed files** section on this [Debian wiki entry](https://wiki.de
         files/preseed_files/kvm-buster.cfg
         files/preseed_files/kvm-stretch-encrypted.cfg
         files/preseed_files/kvm-stretch.cfg
+        files/preseed_files/kvm-trixie-encrypted.cfg
+        files/preseed_files/kvm-trixie.cfg
         files/preseed_files/utm-bookworm-encrypted.cfg
         files/preseed_files/utm-bookworm.cfg
         files/preseed_files/utm-bullseye.cfg
+        files/preseed_files/utm-trixie-encrypted.cfg
+        files/preseed_files/utm-trixie.cfg
         files/preseed_files/workstation-bookworm-encrypted_boot.cfg
         files/preseed_files/workstation-bullseye-encrypted.cfg
         files/preseed_files/workstation-bullseye-encrypted_boot.cfg
@@ -202,6 +216,83 @@ In it's current form:
 - Passwordless SSH is configured with SSH public keys for the created user
 
 The sky is really the limit with what is possible..
+
+---
+
+## Docker Support
+The Dockerfile herein installs `whois` for the `mkpasswd` binary. This allows
+us to generate password hashes for use in the ISO. `vim-tiny` is also installed
+to allow editing of the `options.env` file inside the container.
+
+----
+
+## Prerequisites
+Podman running locally with multi-architecture support.
+
+----
+
+## Usage
+### Build and Run the Container
+#### Podman
+- Create a manifest:
+```bash
+podman manifest create mkiso:v1.0
+```
+
+- Build for arm64 and amd64 architectures:
+```bash
+podman build --platform linux/amd64,linux/arm64 --manifest mkiso:v1.0 .
+```
+
+- Run the container and enter a shell:
+```bash
+podman run \
+  --interactive \
+  --tty \
+  --rm \
+  --platform linux/amd64 \
+  --volume ./:/opt/mkiso \
+  mkiso
+```
+
+This will run a Docker container with the current directory mounted.
+
+
+---
+
+#### Docker
+I haven't tried this recently in Docker. However, I do recall creating a
+builder for multi-arch support. Then I used that builder to create the image.
+
+----
+
+### Create the ISO
+
+- Generate password hash:
+```bash
+mkpasswd -m sha-512
+mkpasswd -m yescrypt
+```
+
+- Update `options.env` with the hash and any other variables:
+```bash
+vi options.env
+```
+
+- Create the iso:
+```bash
+# Make sure that the iso `${arch}` matches the `${arch}` of the build container
+./mk_iso debian-${version}-${arch}-netinst.iso
+```
+
+- Exit the container:
+```bash
+exit
+```
+
+Since we mounted the local directory in the container, the resultant ISO  will
+be in your local directory when you exit the container.
+
 
 ## Contributing
 I look forward to receiving constructive criticism and/or ideas on how to improve my code.
