@@ -252,7 +252,7 @@ podman run \
   --rm \
   --platform linux/amd64 \
   --volume ./:/opt/mkiso \
-  mkiso
+  mkiso:v1.0
 ```
 
 This will run a Docker container with the current directory mounted.
